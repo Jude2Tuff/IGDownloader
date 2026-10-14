@@ -1,5 +1,5 @@
-# Creates (or replaces) a Windows scheduled task that runs auto_download.py
-# runs_per_day times a day, spread evenly, each with up to 1 hour of random delay.
+﻿# Creates (or replaces) a Windows scheduled task that runs auto_download.py
+# runs_per_day times a day, spread evenly starting at midnight (2 = 12 AM and 12 PM).
 # Run again after changing runs_per_day in config.json.
 # Remove with: Unregister-ScheduledTask -TaskName IGDownloader -Confirm:$false
 
@@ -15,8 +15,8 @@ $action = New-ScheduledTaskAction -Execute $python -Argument "auto_download.py" 
 $triggers = @()
 $spacing = 24 / $runs
 for ($i = 0; $i -lt $runs; $i++) {
-    $time = (Get-Date).Date.AddHours(8 + $i * $spacing)
-    $triggers += New-ScheduledTaskTrigger -Daily -At $time -RandomDelay (New-TimeSpan -Hours 1)
+    $time = (Get-Date).Date.AddHours($i * $spacing)
+    $triggers += New-ScheduledTaskTrigger -Daily -At $time
 }
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
@@ -24,4 +24,4 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnB
 Register-ScheduledTask -TaskName "IGDownloader" -Action $action -Trigger $triggers -Settings $settings -Force | Out-Null
 
 Write-Host "Scheduled IGDownloader to run $runs times a day at:"
-$triggers | ForEach-Object { Write-Host ("  " + ([datetime]$_.StartBoundary).ToString("h:mm tt") + " (+ up to 1 hr random)") }
+$triggers | ForEach-Object { Write-Host ("  " + ([datetime]$_.StartBoundary).ToString("h:mm tt")) }
