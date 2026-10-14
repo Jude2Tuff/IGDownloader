@@ -57,22 +57,41 @@ def view_count(post):
     return max(counts) if counts else 0
 
 
-def get_reel_views(loader, username, config):
-    """Return {shortcode: views} for the account's reels, from cache if fresh."""
+def get_candidates(loader, username, config, archive):
+    """Return {shortcode: views} for the account's newest undownloaded reels that
+    meet min_views, up to qualifying_reels_per_account. Uses today's cache if fresh."""
     CACHE_DIR.mkdir(exist_ok=True)
     cache_file = CACHE_DIR / f"{username}.json"
     if cache_file.exists():
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
         if time.time() - cached["scanned_at"] < CACHE_MAX_AGE:
-            return cached["reels"]
+            return {code: views for code, views in cached["reels"].items() if code not in archive}
 
     log.info("@%s: scanning reels...", username)
     profile = instaloader.Profile.from_username(loader.context, username)
-    limit = config["max_reels_to_scan_per_account"] or None  # 0 = all
-    reels = {post.shortcode: view_count(post) for post in islice(profile.get_reels(), limit)}
+    reels = {}
+    for post in islice(profile.get_reels(), config["max_reels_to_scan_per_account"]):
+        views = view_count(post)
+        if views >= config["min_views"] and post.shortcode not in archive:
+            reels[post.shortcode] = views
+            if len(reels) >= config["qualifying_reels_per_account"]:
+                break
     cache_file.write_text(json.dumps({"scanned_at": time.time(), "reels": reels}), encoding="utf-8")
-    log.info("@%s: found %d reels", username, len(reels))
     return reels
+
+
+def pick_spread(candidates_by_account, count):
+    """Pick up to `count` random reels, taking one per account in turn so they're spread out."""
+    pools = {user: random.sample(list(reels.items()), len(reels)) for user, reels in candidates_by_account.items()}
+    order = list(pools)
+    random.shuffle(order)
+    picks = []
+    while len(picks) < count and any(pools.values()):
+        for user in order:
+            if pools[user] and len(picks) < count:
+                code, views = pools[user].pop()
+                picks.append((user, code, views))
+    return picks
 
 
 def main():
@@ -94,24 +113,22 @@ def main():
         return 1
 
     archive = load_archive()
-    accounts = random.sample(config["accounts"], min(config["accounts_per_run"], len(config["accounts"])))
-    log.info("Run started. Accounts this run: %s", ", ".join(accounts))
+    accounts = config["accounts"]
+    log.info("Run started. Scanning %d accounts.", len(accounts))
 
-    candidates = []
+    candidates_by_account = {}
     for username in accounts:
         try:
-            reels = get_reel_views(loader, username, config)
-            found = [(username, code, views) for code, views in reels.items()
-                     if views >= config["min_views"] and code not in archive]
-            log.info("@%s: %d undownloaded reels with >= %d views", username, len(found), config["min_views"])
-            candidates.extend(found)
+            reels = get_candidates(loader, username, config, archive)
+            log.info("@%s: %d candidate reels with >= %d views", username, len(reels), config["min_views"])
+            if reels:
+                candidates_by_account[username] = reels
         except Exception as e:
             log.warning("@%s: skipped (%s)", username, e)
         time.sleep(random.uniform(5, 15))  # pause between accounts to look less like a bot
 
-    random.shuffle(candidates)
     downloaded = 0
-    for username, shortcode, views in candidates[: config["videos_per_run"]]:
+    for username, shortcode, views in pick_spread(candidates_by_account, config["videos_per_run"]):
         name = f"{username}_{shortcode}"
         if args.dry_run:
             log.info("[dry run] would download %s (%d views)", name, views)

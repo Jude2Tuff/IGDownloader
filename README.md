@@ -31,12 +31,12 @@ If downloads start failing, Instagram has probably changed something. Update yt-
 
 ## Automatic mode
 
-`auto_download.py` runs on a schedule. Each run picks random accounts from your list and downloads reels of any age above your view threshold, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`). Each account's full reel list is scanned once a day and cached in `cache/`.
+`auto_download.py` runs on a schedule. Each run scans every account in your list, takes the newest reels above your view threshold (up to `qualifying_reels_per_account` each), and downloads `videos_per_run` of them at random, spread across the accounts, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`). Each account's full reel list is scanned once a day and cached in `cache/`.
 
 1. Edit `config.json`:
    - `instagram_username`: the Instagram account the script logs in as. Use a spare account, because automated scraping can get an account rate-limited or banned.
    - `accounts`: the accounts to pull videos from
-   - `runs_per_day`, `accounts_per_run`, `videos_per_run`, `min_views`, `max_reels_to_scan_per_account` (0 = all)
+   - `runs_per_day`, `videos_per_run`, `min_views`, `qualifying_reels_per_account`, `max_reels_to_scan_per_account` (how deep to look if an account has few qualifying reels)
 2. Log in: sign in to instagram.com in **Firefox**, then run `.venv\Scripts\python import_firefox_session.py`. It copies that login (no password needed) and fills in `instagram_username`. Rerun it if Instagram ever signs you out.
 3. Test without downloading: `.venv\Scripts\python auto_download.py --dry-run`
 4. Turn on the schedule: `powershell -ExecutionPolicy Bypass -File setup_schedule.ps1`
