@@ -56,7 +56,7 @@ def view_count(post):
 def find_candidates(loader, username, config, archive):
     profile = instaloader.Profile.from_username(loader.context, username)
     candidates = []
-    for post in islice(profile.get_posts(), config["posts_to_scan_per_account"]):
+    for post in islice(profile.get_reels(), config["posts_to_scan_per_account"]):
         if not post.is_video or post.shortcode in archive:
             continue
         views = view_count(post)
@@ -106,6 +106,7 @@ def main():
             continue
         try:
             loader.download_pic(str(out_dir / name), post.video_url, post.date_utc)
+            (out_dir / f"{name}.txt").write_text(post.caption or "", encoding="utf-8")
             add_to_archive(post.shortcode)
             downloaded += 1
             log.info("Downloaded %s (%d views)", name, views)

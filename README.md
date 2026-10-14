@@ -1,4 +1,4 @@
-# Instagram Video Downloader
+﻿# Instagram Video Downloader
 
 Downloads Instagram reels and video posts as MP4 files, using [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
@@ -31,7 +31,7 @@ If downloads start failing, Instagram has probably changed something. Update yt-
 
 ## Automatic mode
 
-`auto_download.py` runs on a schedule. Each run picks random accounts from your list, scans their recent posts, and downloads videos above your view threshold. Videos it has already saved are skipped (tracked in `downloaded.txt`).
+`auto_download.py` runs on a schedule. Each run picks random accounts from your list, scans their recent Reels, and downloads videos above your view threshold, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`).
 
 1. Edit `config.json`:
    - `instagram_username`: the Instagram account the script logs in as. Use a spare account, because automated scraping can get an account rate-limited or banned.

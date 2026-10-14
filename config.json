@@ -1,14 +1,15 @@
 {
-  "instagram_username": "YOUR_LOGIN_USERNAME",
+  "instagram_username": "ptbizz123@gmail.com",
   "accounts": [
-    "account_one",
-    "account_two",
-    "account_three"
+    "juggperc",
+    "criingemoist",
+    "fujipurple_",
+    "ibh8ting"
   ],
-  "runs_per_day": 3,
+  "runs_per_day": 5,
   "accounts_per_run": 2,
-  "videos_per_run": 5,
-  "min_views": 100000,
+  "videos_per_run": 1,
+  "min_views": 10000,
   "posts_to_scan_per_account": 30,
   "output_folder": "downloads"
 }
