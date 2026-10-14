@@ -37,10 +37,7 @@ If downloads start failing, Instagram has probably changed something. Update yt-
    - `instagram_username`: the Instagram account the script logs in as. Use a spare account, because automated scraping can get an account rate-limited or banned.
    - `accounts`: the accounts to pull videos from
    - `runs_per_day`, `accounts_per_run`, `videos_per_run`, `min_views`, `max_reels_to_scan_per_account` (0 = all)
-2. Log in once (you type your password; it's saved as a session file, not in this repo):
-   ```bash
-   .venv\Scripts\instaloader --login YOUR_LOGIN_USERNAME
-   ```
+2. Log in: sign in to instagram.com in **Firefox**, then run `.venv\Scripts\python import_firefox_session.py`. It copies that login (no password needed) and fills in `instagram_username`. Rerun it if Instagram ever signs you out.
 3. Test without downloading: `.venv\Scripts\python auto_download.py --dry-run`
 4. Turn on the schedule: `powershell -ExecutionPolicy Bypass -File setup_schedule.ps1`
 
