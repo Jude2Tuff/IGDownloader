@@ -5,3 +5,4 @@ __pycache__/
 urls.txt
 logs/
 downloaded.txt
+cache/

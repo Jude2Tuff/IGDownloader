@@ -31,12 +31,12 @@ If downloads start failing, Instagram has probably changed something. Update yt-
 
 ## Automatic mode
 
-`auto_download.py` runs on a schedule. Each run picks random accounts from your list, scans their recent Reels, and downloads videos above your view threshold, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`).
+`auto_download.py` runs on a schedule. Each run picks random accounts from your list, and downloads reels of any age above your view threshold, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`). Each account's full reel list is scanned once a day and cached in `cache/`.
 
 1. Edit `config.json`:
    - `instagram_username`: the Instagram account the script logs in as. Use a spare account, because automated scraping can get an account rate-limited or banned.
    - `accounts`: the accounts to pull videos from
-   - `runs_per_day`, `accounts_per_run`, `videos_per_run`, `min_views`, `posts_to_scan_per_account`
+   - `runs_per_day`, `accounts_per_run`, `videos_per_run`, `min_views`, `max_reels_to_scan_per_account` (0 = all)
 2. Log in once (you type your password; it's saved as a session file, not in this repo):
    ```bash
    .venv\Scripts\instaloader --login YOUR_LOGIN_USERNAME

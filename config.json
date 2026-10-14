@@ -10,6 +10,6 @@
   "accounts_per_run": 2,
   "videos_per_run": 1,
   "min_views": 10000,
-  "posts_to_scan_per_account": 30,
+  "max_reels_to_scan_per_account": 0,
   "output_folder": "downloads"
 }
