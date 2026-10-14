@@ -1,2 +1,4 @@
 yt-dlp
 instaloader
+flask
+send2trash

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Review</title>
+<style>
+  :root {
+    --bg: #0b0b0f;
+    --card: #15151c;
+    --text: #f4f4f6;
+    --muted: #9a9aa8;
+    --keep: #22c55e;
+    --toss: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; align-items: center; }
+
+  header { width: 100%; max-width: 480px; display: flex; justify-content: space-between;
+    align-items: center; padding: 12px 16px; font-size: 14px; color: var(--muted); }
+  .filters button { background: none; border: 1px solid #2a2a35; color: var(--muted);
+    padding: 4px 10px; border-radius: 999px; font: inherit; cursor: pointer; margin-left: 4px; }
+  .filters button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  main { flex: 1; width: 100%; max-width: 480px; position: relative; min-height: 0; padding: 0 12px; }
+  .card { position: absolute; inset: 0 12px; background: var(--card); border-radius: 18px;
+    overflow: hidden; display: flex; align-items: center; justify-content: center;
+    transition: transform .25s ease, opacity .25s ease; touch-action: none; }
+  .card video, .card img { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .card.out-left { transform: translateX(-120%) rotate(-12deg); opacity: 0; }
+  .card.out-right { transform: translateX(120%) rotate(12deg); opacity: 0; }
+  .card.out-up { transform: translateY(-40%); opacity: 0; }
+  .card.out-down { transform: translateY(40%); opacity: 0; }
+
+  .meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 16px 14px;
+    background: linear-gradient(transparent, rgba(0,0,0,.85)); pointer-events: none; }
+  .account { font-weight: 600; font-size: 15px; }
+  .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-left: 8px; }
+  .caption { font-size: 13px; line-height: 1.4; margin-top: 4px; white-space: pre-wrap;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    pointer-events: auto; cursor: pointer; }
+  .caption.open { -webkit-line-clamp: unset; max-height: 40vh; overflow-y: auto; }
+  .sound { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.55); border: 0;
+    color: #fff; border-radius: 999px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+
+  .stamp { position: absolute; top: 24px; padding: 6px 14px; border: 3px solid; border-radius: 8px;
+    font-weight: 800; font-size: 26px; letter-spacing: .05em; opacity: 0; transition: opacity .1s; }
+  .stamp.keep { left: 20px; color: var(--keep); transform: rotate(-12deg); }
+  .stamp.toss { right: 20px; color: var(--toss); transform: rotate(12deg); }
+
+  footer { display: flex; gap: 48px; padding: 16px 0 calc(20px + env(safe-area-inset-bottom)); align-items: center; }
+  .btn { width: 72px; height: 72px; border-radius: 50%; border: 0; cursor: pointer; display: grid;
+    place-items: center; background: var(--card); transition: transform .1s; }
+  .btn:active { transform: scale(.9); }
+  .btn svg { width: 34px; height: 34px; }
+  .btn.toss { box-shadow: inset 0 0 0 2px var(--toss); color: var(--toss); }
+  .btn.keep { box-shadow: inset 0 0 0 2px var(--keep); color: var(--keep); }
+  .btn:disabled { opacity: .3; cursor: default; }
+  .hint { font-size: 12px; color: var(--muted); text-align: center; padding-bottom: 8px; }
+
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    color: var(--muted); padding: 24px; line-height: 1.6; }
+  .empty strong { color: var(--text); font-size: 20px; display: block; margin-bottom: 6px; }
+  @media (max-width: 600px) { .hint { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <span id="counter">Loading…</span>
+  <span class="filters">
+    <button data-f="all" class="on">All</button>
+    <button data-f="reel">Reels</button>
+    <button data-f="picture">Pictures</button>
+  </span>
+</header>
+<main id="stage"></main>
+<footer>
+  <button class="btn toss" id="toss" title="Delete (← or X)" aria-label="Delete">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <button class="btn keep" id="keep" title="Keep (→ or Enter)" aria-label="Keep">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+  </button>
+</footer>
+<div class="hint">→ / Enter keep · ← / X delete · ↑ ↓ or scroll to move between · M sound · or drag the card left/right</div>
+
+<script>
+let all = [], filter = "all", index = 0, muted = true, busy = false;
+const stage = document.getElementById("stage");
+const counter = document.getElementById("counter");
+
+const visible = () => filter === "all" ? all : all.filter(i => i.kind === filter);
+
+function render() {
+  const list = visible();
+  stage.innerHTML = "";
+  document.getElementById("keep").disabled = document.getElementById("toss").disabled = !list.length;
+  if (!list.length) {
+    counter.textContent = "0 left";
+    stage.innerHTML = `<div class="empty"><div><strong>All caught up</strong>Nothing left to review${filter === "all" ? "" : " in this filter"}.<br>New downloads land in downloads/unprocessed.</div></div>`;
+    return;
+  }
+  index = Math.max(0, Math.min(index, list.length - 1));
+  const item = list[index];
+  counter.textContent = `${index + 1} / ${list.length}`;
+
+  const card = document.createElement("div");
+  card.className = "card";
+  const src = "/media/" + encodeURIComponent(item.name);
+  card.innerHTML = item.kind === "reel"
+    ? `<video src="${src}" autoplay loop playsinline ${muted ? "muted" : ""}></video><button class="sound">${muted ? "🔇 Tap for sound" : "🔊"}</button>`
+    : `<img src="${src}" alt="">`;
+  card.insertAdjacentHTML("beforeend", `<span class="stamp keep">KEEP</span><span class="stamp toss">DELETE</span>
+    <div class="meta"><span class="account"></span><span class="kind"></span><div class="caption"></div></div>`);
+  card.querySelector(".account").textContent = "@" + item.account;
+  card.querySelector(".kind").textContent = item.kind;
+  const cap = card.querySelector(".caption");
+  cap.textContent = item.caption;
+  cap.onclick = e => { e.stopPropagation(); cap.classList.toggle("open"); };
+  const sound = card.querySelector(".sound");
+  if (sound) sound.onclick = e => { e.stopPropagation(); toggleSound(); };
+  const video = card.querySelector("video");
+  if (video) video.onclick = () => video.paused ? video.play() : video.pause();
+  addDrag(card);
+  stage.appendChild(card);
+}
+
+function toggleSound() {
+  muted = !muted;
+  const v = stage.querySelector("video"), b = stage.querySelector(".sound");
+  if (v) { v.muted = muted; v.play(); }
+  if (b) b.textContent = muted ? "🔇 Tap for sound" : "🔊";
+}
+
+function move(step) {
+  const list = visible();
+  const next = index + step;
+  if (busy || next < 0 || next >= list.length) return;
+  const card = stage.querySelector(".card");
+  busy = true;
+  card.classList.add(step > 0 ? "out-up" : "out-down");
+  setTimeout(() => { index = next; busy = false; render(); }, 180);
+}
+
+async function decide(action) {
+  const list = visible();
+  if (busy || !list.length) return;
+  busy = true;
+  const item = list[index];
+  const card = stage.querySelector(".card");
+  card.querySelector(".stamp." + (action === "keep" ? "keep" : "toss")).style.opacity = 1;
+  card.classList.add(action === "keep" ? "out-right" : "out-left");
+  const v = card.querySelector("video"); if (v) v.pause();
+  try {
+    const r = await fetch("/api/decide", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: item.name, action }) });
+    if (!r.ok) throw new Error(r.status);
+    all = all.filter(i => i !== item);
+  } catch (e) {
+    alert("Couldn't save that choice — is review.py still running?");
+  }
+  setTimeout(() => { busy = false; render(); }, 220);
+}
+
+function addDrag(card) {
+  let startX = null, startY = null, dx = 0;
+  const keep = card.querySelector(".stamp.keep"), toss = card.querySelector(".stamp.toss");
+  card.addEventListener("pointerdown", e => {
+    if (e.target.closest("button, .caption")) return;
+    startX = e.clientX; startY = e.clientY; dx = 0; card.style.transition = "none";
+  });
+  card.addEventListener("pointermove", e => {
+    if (startX === null) return;
+    dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) { card.style.transform = `translateY(${dy * .4}px)`; return; }
+    card.style.transform = `translateX(${dx}px) rotate(${dx / 20}deg)`;
+    keep.style.opacity = Math.max(0, dx / 120); toss.style.opacity = Math.max(0, -dx / 120);
+  });
+  const end = e => {
+    if (startX === null) return;
+    const dy = e.clientY - startY;
+    card.style.transition = ""; card.style.transform = ""; keep.style.opacity = toss.style.opacity = 0;
+    startX = null;
+    if (Math.abs(dx) > 110 && Math.abs(dx) > Math.abs(dy)) decide(dx > 0 ? "keep" : "delete");
+    else if (Math.abs(dy) > 80) move(dy < 0 ? 1 : -1);
+  };
+  card.addEventListener("pointerup", end);
+  card.addEventListener("pointercancel", end);
+}
+
+document.getElementById("keep").onclick = () => decide("keep");
+document.getElementById("toss").onclick = () => decide("delete");
+document.querySelectorAll(".filters button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".filters button").forEach(x => x.classList.toggle("on", x === b));
+  filter = b.dataset.f; index = 0; render();
+});
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "arrowright" || k === "enter") decide("keep");
+  else if (k === "arrowleft" || k === "x" || k === "delete") decide("delete");
+  else if (k === "arrowdown" || k === " ") { e.preventDefault(); move(1); }
+  else if (k === "arrowup") move(-1);
+  else if (k === "m") toggleSound();
+});
+let wheelLock = 0;
+stage.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (Date.now() < wheelLock || Math.abs(e.deltaY) < 20) return;
+  wheelLock = Date.now() + 400; move(e.deltaY > 0 ? 1 : -1);
+}, { passive: false });
+
+fetch("/api/items").then(r => r.json()).then(items => { all = items; render(); });
+</script>
+</body>
+</html>

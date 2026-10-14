@@ -11,5 +11,7 @@
   "min_views": 10000,
   "qualifying_reels_per_account": 10,
   "max_reels_to_scan_per_account": 50,
+  "pictures_per_account": 15,
+  "picture_posts_to_consider": 30,
   "output_folder": "downloads"
 }

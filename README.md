@@ -1,47 +1,59 @@
-﻿# Instagram Video Downloader
+# Instagram Downloader
 
-Downloads Instagram reels and video posts as MP4 files, using [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+Automatically downloads reels and pictures from a list of Instagram accounts, then lets you swipe through them to keep or delete each one.
 
-Only download videos you own or have permission to save.
+Only download content you own or have permission to save.
 
 ## Setup (once on each computer)
 
 ```bash
-git clone <your-repo-url>
-cd TestVideos
+git clone https://github.com/Jude2Tuff/IGDownloader.git
+cd IGDownloader
 py -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-FFmpeg is optional but recommended. Some videos come as separate video and audio streams, and yt-dlp needs FFmpeg to merge them: `winget install Gyan.FFmpeg`
+## Folders
 
-## Usage
-
-```bash
-python ig_download.py https://www.instagram.com/reel/XXXXXXXXX/
-python ig_download.py -f urls.txt            # one URL per line
-python ig_download.py URL -o my_folder       # choose output folder
-python ig_download.py URL --cookies-from-browser edge   # private posts or posts that need a login
+```
+downloads/
+  unprocessed/        new downloads land here, waiting for review
+  approved_reels/     reels you kept
+  approved_pictures/  pictures you kept
 ```
 
-Videos are saved to `downloads/`. Git ignores that folder, so videos stay on the machine that downloaded them.
+Each file has a matching `.txt` with its caption. Git ignores `downloads/`, so files stay on the machine that downloaded them.
 
-If downloads start failing, Instagram has probably changed something. Update yt-dlp with `pip install -U yt-dlp`.
+## Automatic downloads
 
-## Automatic mode
+`auto_download.py` scans every account in `config.json` on each run:
 
-`auto_download.py` runs on a schedule. Each run scans every account in your list, takes the newest reels above your view threshold (up to `qualifying_reels_per_account` each), and downloads `videos_per_run` of them at random, spread across the accounts, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`). Each account's full reel list is scanned once a day and cached in `cache/`.
+- **Reels:** takes each account's newest reels with at least `min_views` (up to `qualifying_reels_per_account` each, looking back at most `max_reels_to_scan_per_account`), then downloads `videos_per_run` of them at random, spread across the accounts. Reel scans are cached in `cache/` for a day.
+- **Pictures:** no view requirement. From each account's newest `picture_posts_to_consider` posts, downloads `pictures_per_account` at random. Slideshows contribute one random image.
 
-1. Edit `config.json`:
-   - `instagram_username`: the Instagram account the script logs in as. Use a spare account, because automated scraping can get an account rate-limited or banned.
-   - `accounts`: the accounts to pull videos from
-   - `runs_per_day`, `videos_per_run`, `min_views`, `qualifying_reels_per_account`, `max_reels_to_scan_per_account` (how deep to look if an account has few qualifying reels)
-2. Log in: sign in to instagram.com in **Firefox**, then run `.venv\Scripts\python import_firefox_session.py`. It copies that login (no password needed) and fills in `instagram_username`. Rerun it if Instagram ever signs you out.
+Nothing is downloaded twice (tracked in `downloaded.txt`).
+
+1. Edit `config.json`. Add accounts to `accounts` and adjust the numbers.
+2. Log in: sign in to instagram.com in **Firefox** (use a spare account; automated scraping can get an account rate-limited or banned), then run `.venv\Scripts\python import_firefox_session.py`. It copies that login (no password needed). Rerun it if Instagram ever signs you out.
 3. Test without downloading: `.venv\Scripts\python auto_download.py --dry-run`
 4. Turn on the schedule: `powershell -ExecutionPolicy Bypass -File setup_schedule.ps1`
 
-Logs are in `logs/auto_download.log`. Run the schedule on **one** computer only, because each machine keeps its own download history. To stop it: `Unregister-ScheduledTask -TaskName IGDownloader -Confirm:$false`
+Use `--only reels` or `--only pictures` to download just one kind. Logs are in `logs/auto_download.log`. Run the schedule on **one** computer only. To stop it: `Unregister-ScheduledTask -TaskName IGDownloader -Confirm:$false`
+
+## Reviewing
+
+Double-click `review.bat` (or run `.venv\Scripts\python review.py`). It opens in your browser and shows everything in `unprocessed/` one at a time.
+
+- **Green check** / → / Enter / drag right: keep (moves to the approved folder)
+- **Red X** / ← / X / drag left: delete (sends to the Recycle Bin)
+- ↑ ↓ / scroll / drag up or down: move between items without deciding
+- M: sound on/off. Tap the caption to expand it. Filter by Reels or Pictures at the top.
+
+Close the black window to stop the review app.
+
+## Manual download
+
+`ig_download.py URL` downloads a single post or reel with yt-dlp.
 
 ## Syncing between computers
 
