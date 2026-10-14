@@ -31,7 +31,7 @@ If downloads start failing, Instagram has probably changed something. Update yt-
 
 ## Automatic mode
 
-`auto_download.py` runs on a schedule. Each run picks random accounts from your list, and downloads reels of any age above your view threshold, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`). Each account's full reel list is scanned once a day and cached in `cache/`.
+`auto_download.py` runs on a schedule. Each run picks random accounts from your list and downloads reels of any age above your view threshold, each with its caption saved as a matching .txt file. Videos it has already saved are skipped (tracked in `downloaded.txt`). Each account's full reel list is scanned once a day and cached in `cache/`.
 
 1. Edit `config.json`:
    - `instagram_username`: the Instagram account the script logs in as. Use a spare account, because automated scraping can get an account rate-limited or banned.
