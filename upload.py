@@ -43,6 +43,7 @@ AUDIO_EXT = {".mp3", ".m4a", ".wav"}
 LITTERBOX = "https://litterbox.catbox.moe/resources/internals/api.php"
 SLIDE_SECONDS = 3
 MAX_SLIDES = 10  # Instagram's carousel limit
+SLIDESHOW_CHANCE = 0.7  # how often a loose image gets bundled into a slideshow instead of posting alone
 CAPTION_LIMIT = 2200  # Instagram's maximum
 SLIDE = re.compile(r"^(.*)_(\d+)$")
 
@@ -76,6 +77,10 @@ def pick_post():
         return None, []
     name = post_of(images[0])[0]
     slides = sorted((p for p in images if post_of(p)[0] == name), key=lambda p: post_of(p)[1])[:MAX_SLIDES]
+    if len(slides) == 1 and random.random() < SLIDESHOW_CHANCE:  # bundle loose images into a slideshow
+        singles = [p for p in images if post_of(p)[1] == 0][:random.randint(3, 5)]
+        if len(singles) > 1:
+            slides = singles
     return ("slideshow" if len(slides) > 1 else "image"), slides
 
 
