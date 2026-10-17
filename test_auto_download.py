@@ -24,4 +24,8 @@ assert picture_urls({"type": "Sidecar", "childPosts": [], "images": ["x"]}) == [
 
 picks = pick_spread({"u1": {"a": {}, "b": {}, "c": {}}, "u2": {"d": {}}}, 3)
 assert len(picks) == 3 and {p[0] for p in picks} == {"u1", "u2"}
+from pathlib import Path
+from upload import post_of
+assert post_of(Path("dm_DeaFWqjoPpn_3.jpg")) == ("dm_DeaFWqjoPpn", 3)
+assert post_of(Path("criingemoist_DefugT_PfQO.jpg")) == ("criingemoist_DefugT_PfQO", 0)  # underscore in shortcode
 print("ok")

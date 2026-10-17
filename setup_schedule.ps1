@@ -25,3 +25,13 @@ Register-ScheduledTask -TaskName "IGDownloader" -Action $action -Trigger $trigge
 
 Write-Host "Scheduled IGDownloader to run $runs times a day at:"
 $triggers | ForEach-Object { Write-Host ("  " + ([datetime]$_.StartBoundary).ToString("h:mm tt")) }
+
+# Posting: 2 reels and 2 images/slideshows a day (upload.py).
+# Remove with: Unregister-ScheduledTask -TaskName IGUpload-Reels,IGUpload-Posts -Confirm:$false
+foreach ($job in @(@{Name = "IGUpload-Reels"; Kind = "reel"; At = @("9:00", "17:00")},
+                   @{Name = "IGUpload-Posts"; Kind = "post"; At = @("13:00", "21:00")})) {
+    $uploadAction = New-ScheduledTaskAction -Execute $python -Argument "upload.py $($job.Kind)" -WorkingDirectory $root
+    $uploadTriggers = $job.At | ForEach-Object { New-ScheduledTaskTrigger -Daily -At $_ }
+    Register-ScheduledTask -TaskName $job.Name -Action $uploadAction -Trigger $uploadTriggers -Settings $settings -Force | Out-Null
+    Write-Host "Scheduled $($job.Name) at $($job.At -join ' and ')"
+}

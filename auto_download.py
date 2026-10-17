@@ -76,6 +76,22 @@ def save(out_dir, name, ext, url, post):
 
 # ---------- Apify ----------
 
+def apify_items(urls, results_type, limit):
+    """Run Apify's Instagram scraper on urls and return its items, or None without a token."""
+    token = os.environ.get("APIFY_TOKEN")
+    if not token:
+        log.error("APIFY_TOKEN isn't set. Copy your token from apify.com > Settings > API & Integrations, "
+                  'run: setx APIFY_TOKEN "your-token", then open a new window.')
+        return None
+    body = json.dumps({"directUrls": urls, "resultsType": results_type, "resultsLimit": limit,
+                       "skipPinnedPosts": True}).encode()
+    request = urllib.request.Request(APIFY_URL, data=body, headers={
+        "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    # ponytail: synchronous call, Apify cuts it off after 5 min; switch to start-run + poll if accounts grow a lot
+    with urllib.request.urlopen(request, timeout=330) as response:
+        return json.load(response)
+
+
 def fetch(config, results_type, limit):
     """Return {username: [item, ...]} newest first for results_type ("posts" is the
     main grid, "reels" the reels tab), from today's cache or Apify."""
@@ -86,24 +102,10 @@ def fetch(config, results_type, limit):
             log.info("Using today's cached Apify %s.", results_type)
             return cached["posts"]
 
-    token = os.environ.get("APIFY_TOKEN")
-    if not token:
-        log.error("APIFY_TOKEN isn't set. Copy your token from apify.com > Settings > API & Integrations, "
-                  'run: setx APIFY_TOKEN "your-token", then open a new window.')
-        return None
-
     log.info("Fetching %s from Apify...", results_type)
-    body = json.dumps({
-        "directUrls": [f"https://www.instagram.com/{u}/" for u in config["accounts"]],
-        "resultsType": results_type,
-        "resultsLimit": limit,
-        "skipPinnedPosts": True,
-    }).encode()
-    request = urllib.request.Request(APIFY_URL, data=body, headers={
-        "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
-    # ponytail: synchronous call, Apify cuts it off after 5 min; switch to start-run + poll if accounts grow a lot
-    with urllib.request.urlopen(request, timeout=330) as response:
-        items = json.load(response)
+    items = apify_items([f"https://www.instagram.com/{u}/" for u in config["accounts"]], results_type, limit)
+    if items is None:
+        return None
 
     posts = {u: [] for u in config["accounts"]}
     for item in items:
@@ -239,11 +241,31 @@ def shared_links(token, senders):
         if not names & set(senders):
             continue
         # ponytail: the API only returns a conversation's 20 newest messages; anything older is missed
-        messages = ig_get(conv["id"], token, fields="messages{from,shares{link}}")["messages"]["data"]
+        messages = ig_get(conv["id"], token, fields="messages{from,message,shares{link}}")["messages"]["data"]
         for message in messages:
             if message.get("from", {}).get("username") in senders:
                 links += [s["link"] for s in message.get("shares", {}).get("data", []) if s.get("link")]
+                # Shared regular posts arrive empty (Meta only sends them by webhook), so pasted links count too.
+                links += ["https://www." + m[0] for m in SHORTCODE.finditer(message.get("message") or "")]
     return links
+
+
+def download_via_apify(link, name, out_dir):
+    """Save every slide of a post (photos and videos) and its caption through Apify, ~$0.003 a post."""
+    items = apify_items([link], "posts", 1)
+    post = next((i for i in items or [] if i.get("shortCode")), None)
+    if not post:
+        raise RuntimeError("Apify couldn't find this post")
+    slides = [(p["videoUrl"], ".mp4") if p.get("videoUrl") else (p.get("displayUrl"), ".jpg")
+              for p in post.get("childPosts") or [post]]
+    slides = [(url, ext) for url, ext in slides if url] or [(url, ".jpg") for url in post.get("images") or []]
+    if not slides:
+        raise RuntimeError("Apify found no media in this post")
+    for i, (url, ext) in enumerate(slides, 1):
+        file_name = name if len(slides) == 1 else f"{name}_{i}"
+        urllib.request.urlretrieve(url, out_dir / f"{file_name}{ext}")
+        (out_dir / f"{file_name}.txt").write_text(post.get("caption") or "", encoding="utf-8")
+    return len(slides)
 
 
 def download_shared(config, archive, out_dir, dry_run):
@@ -264,9 +286,13 @@ def download_shared(config, archive, out_dir, dry_run):
             log.info("[dry run] would download shared post %s", link)
             continue
         try:
-            with yt_dlp.YoutubeDL({"outtmpl": str(out_dir / f"{name}.%(ext)s"), "quiet": True, "noprogress": True}) as ydl:
-                info = ydl.extract_info(link)
-            (out_dir / f"{name}.txt").write_text(info.get("description") or "", encoding="utf-8")
+            if "/reel" in link:  # free; yt-dlp handles single videos
+                with yt_dlp.YoutubeDL({"outtmpl": str(out_dir / f"{name}.%(ext)s"), "quiet": True,
+                                       "noprogress": True}) as ydl:
+                    info = ydl.extract_info(link)
+                (out_dir / f"{name}.txt").write_text(info.get("description") or "", encoding="utf-8")
+            else:  # photo posts and slideshows: yt-dlp would skip the photos
+                log.info("%s: %d slide(s)", link, download_via_apify(link, name, out_dir))
             add_to_archive(shortcode)
             archive.add(shortcode)
             downloaded += 1
