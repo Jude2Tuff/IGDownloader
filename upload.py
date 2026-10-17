@@ -41,7 +41,6 @@ VIDEO_EXT = {".mp4", ".mov"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
 AUDIO_EXT = {".mp3", ".m4a", ".wav"}
 LITTERBOX = "https://litterbox.catbox.moe/resources/internals/api.php"
-SLIDE_SECONDS = 3
 MAX_SLIDES = 10  # Instagram's carousel limit
 SLIDESHOW_CHANCE = 0.7  # how often a loose image gets bundled into a slideshow instead of posting alone
 CAPTION_LIMIT = 2200  # Instagram's maximum
@@ -70,14 +69,14 @@ def post_of(path):
     return (match[1], int(match[2])) if match else (path.stem, 0)
 
 
-def pick_post():
-    """The oldest captioned image, with the rest of its slides in order."""
+def pick_post(force_slideshow=False):
+    """The oldest image, with the rest of its slides in order."""
     images = queue(IMAGES, IMAGE_EXT)
     if not images:
         return None, []
     name = post_of(images[0])[0]
     slides = sorted((p for p in images if post_of(p)[0] == name), key=lambda p: post_of(p)[1])[:MAX_SLIDES]
-    if len(slides) == 1 and random.random() < SLIDESHOW_CHANCE:  # bundle loose images into a slideshow
+    if len(slides) == 1 and (force_slideshow or random.random() < SLIDESHOW_CHANCE):  # bundle loose images into a slideshow
         singles = [p for p in images if post_of(p)[1] == 0][:random.randint(3, 5)]
         if len(singles) > 1:
             slides = singles
@@ -133,11 +132,13 @@ def publish(user_id, token, creation_id):
 
 
 def slideshow_video(images, track, out_path):
-    """Render images (SLIDE_SECONDS each, 1080x1920) over a music track with FFmpeg."""
-    total = SLIDE_SECONDS * len(images)
+    """Render images (1080x1920) over the whole music track with FFmpeg, slides spread evenly across it."""
+    total = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                  str(track)], capture_output=True, text=True, check=True).stdout)
+    per_slide = total / len(images)
     command = ["ffmpeg", "-y", "-loglevel", "error"]
     for image in images:
-        command += ["-loop", "1", "-t", str(SLIDE_SECONDS), "-i", str(image)]
+        command += ["-loop", "1", "-t", f"{per_slide:.3f}", "-i", str(image)]
     command += ["-i", str(track)]
     scaled = "".join(
         f"[{i}:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
@@ -146,7 +147,7 @@ def slideshow_video(images, track, out_path):
     fade = f"[{len(images)}:a]afade=t=out:st={total - 1}:d=1[a]"
     command += ["-filter_complex", scaled + joined + fade, "-map", "[v]", "-map", "[a]",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
-                "-t", str(total), "-movflags", "+faststart", str(out_path)]
+                "-t", f"{total:.3f}", "-movflags", "+faststart", str(out_path)]
     subprocess.run(command, check=True)
 
 
@@ -164,6 +165,7 @@ def main():
     parser = argparse.ArgumentParser(description="Post approved downloads to Instagram.")
     parser.add_argument("kind", choices=["reel", "post"])
     parser.add_argument("--dry-run", action="store_true", help="show what would be posted")
+    parser.add_argument("--slideshow", action="store_true", help="always bundle a loose image into a slideshow")
     args = parser.parse_args()
     setup_logging()
 
@@ -171,7 +173,7 @@ def main():
         videos = queue(VIDEOS, VIDEO_EXT)
         kind, files = ("reel", videos[:1]) if videos else (None, [])
     else:
-        kind, files = pick_post()
+        kind, files = pick_post(args.slideshow)
     if not files:
         log.info("Nothing to post for %s: the queue is empty.", args.kind)
         return 0
