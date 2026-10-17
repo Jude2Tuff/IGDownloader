@@ -1,14 +1,15 @@
 """Post approved downloads to Instagram (the account IG_TOKEN belongs to).
 
 Usage:
-    python upload.py reel              # oldest captioned video in processed_videos/
-    python upload.py post              # oldest captioned image or slideshow in processed_images/
+    python upload.py reel              # a random video from processed_videos/
+    python upload.py post              # a random photo carousel or single image from processed_images/
     python upload.py reel --dry-run    # show what would be posted
 
-Captions come from the .txt next to each file; files without one are skipped.
-Slides of one post (name_1.jpg, name_2.jpg, ...) post together as a slideshow.
-With tracks in music/ a slideshow becomes a video with a random track, posted
-as a reel; otherwise it posts as a swipeable carousel.
+Captions come from the .txt next to each file, or a random one from the pool.
+A carousel is the slides of one post (name_1.jpg, name_2.jpg, ...) or 3-5 random
+loose images. It posts as a swipe-through photo carousel; the API can't add music
+to carousels, so its link goes in downloads/add_music.txt to add a song in the app.
+A single image posts as a reel set to a random track from music/.
 Instagram only takes media from a public link, so each file is hosted on
 litterbox.catbox.moe for an hour. Posted files move to downloads/posted/.
 """
@@ -36,6 +37,7 @@ DOWNLOADS = ROOT / CONFIG["output_folder"]
 VIDEOS = DOWNLOADS / "processed_videos"
 IMAGES = DOWNLOADS / "processed_images"
 POSTED = DOWNLOADS / "posted"
+ADD_MUSIC = DOWNLOADS / "add_music.txt"
 MUSIC = ROOT / "music"
 VIDEO_EXT = {".mp4", ".mov"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
@@ -70,16 +72,16 @@ def post_of(path):
 
 
 def pick_post(force_slideshow=False):
-    """The oldest image, with the rest of its slides in order."""
+    """A random image with the rest of its slides in order, or bundled with random loose images."""
     images = queue(IMAGES, IMAGE_EXT)
     if not images:
         return None, []
-    name = post_of(images[0])[0]
+    first = random.choice(images)
+    name = post_of(first)[0]
     slides = sorted((p for p in images if post_of(p)[0] == name), key=lambda p: post_of(p)[1])[:MAX_SLIDES]
-    if len(slides) == 1 and (force_slideshow or random.random() < SLIDESHOW_CHANCE):  # bundle loose images into a slideshow
-        singles = [p for p in images if post_of(p)[1] == 0][:random.randint(3, 5)]
-        if len(singles) > 1:
-            slides = singles
+    if len(slides) == 1 and (force_slideshow or random.random() < SLIDESHOW_CHANCE):
+        others = [p for p in images if post_of(p)[1] == 0 and p != first]
+        slides = [first] + random.sample(others, min(len(others), random.randint(2, 4)))
     return ("slideshow" if len(slides) > 1 else "image"), slides
 
 
@@ -171,7 +173,7 @@ def main():
 
     if args.kind == "reel":
         videos = queue(VIDEOS, VIDEO_EXT)
-        kind, files = ("reel", videos[:1]) if videos else (None, [])
+        kind, files = ("reel", [random.choice(videos)]) if videos else (None, [])
     else:
         kind, files = pick_post(args.slideshow)
     if not files:
@@ -184,8 +186,8 @@ def main():
     tracks = [p for p in MUSIC.glob("*") if p.suffix.lower() in AUDIO_EXT] if MUSIC.exists() else []
     log.info("Posting %s: %s", kind, ", ".join(p.name for p in files))
     if args.dry_run:
-        if kind != "reel":
-            log.info("[dry run] as %s", "a reel with music" if tracks else "a plain image/carousel (music/ is empty)")
+        if kind == "image":
+            log.info("[dry run] as %s", "a reel with music" if tracks else "a plain photo (music/ is empty)")
         log.info("[dry run] caption: %s", caption[:120].replace("\n", " "))
         return 0
 
@@ -194,22 +196,26 @@ def main():
     try:
         if kind == "reel":
             creation = container(user_id, token, media_type="REELS", video_url=host(files[0]), caption=caption)
-        elif tracks:  # images and slideshows go out as reels set to music
-            with tempfile.TemporaryDirectory() as tmp:
-                video = Path(tmp) / "slideshow.mp4"
-                slideshow_video(files, random.choice(tracks), video)
-                creation = container(user_id, token, media_type="REELS", video_url=host(video), caption=caption)
-        elif kind == "image":
-            creation = container(user_id, token, image_url=host(files[0]), caption=caption)
-        else:
+        elif kind == "slideshow":  # swipe-through photo carousel; music gets added in the app
             children = [container(user_id, token, image_url=host(p), is_carousel_item="true") for p in files]
             creation = container(user_id, token, media_type="CAROUSEL", children=",".join(children), caption=caption)
+        elif tracks:  # single image as a reel set to music
+            with tempfile.TemporaryDirectory() as tmp:
+                video = Path(tmp) / "single.mp4"
+                slideshow_video(files, random.choice(tracks), video)
+                creation = container(user_id, token, media_type="REELS", video_url=host(video), caption=caption)
+        else:
+            creation = container(user_id, token, image_url=host(files[0]), caption=caption)
         link = publish(user_id, token, creation)
     except Exception as e:
         log.error("Posting %s failed: %s", kind, e)
         return 1
     move_to_posted(files)
     log.info("Posted %s: %s", kind, link)
+    if kind == "slideshow":
+        with ADD_MUSIC.open("a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M')}  {link}\n")
+        log.info("Carousel needs music: open it in the Instagram app and add a song (listed in %s).", ADD_MUSIC.name)
     return 0
 
 
