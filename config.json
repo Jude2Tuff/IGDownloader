@@ -6,12 +6,15 @@
     "fujipurple_",
     "ibh8ting"
   ],
+  "dm_senders": [
+    "dude_jenton"
+  ],
   "runs_per_day": 2,
   "videos_per_run": 5,
   "min_views": 10000,
-  "qualifying_reels_per_account": 10,
-  "max_reels_to_scan_per_account": 50,
-  "pictures_per_account": 15,
-  "picture_posts_to_consider": 30,
+  "qualifying_reels_per_account": 5,
+  "max_reels_to_scan_per_account": 8,
+  "pictures_per_account": 2,
+  "picture_posts_to_consider": 5,
   "output_folder": "downloads"
 }

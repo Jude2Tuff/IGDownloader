@@ -1,32 +1,56 @@
 """Swipe-style review of downloaded reels and pictures.
 
 Shows everything in downloads/unprocessed/ one at a time.
-  Green check -> moved to downloads/approved_reels/ or downloads/approved_pictures/
+  Green check -> moved to downloads/processed_videos/ or downloads/processed_images/
   Red X       -> sent to the Recycle Bin
 
 Usage: python review.py   (or double-click review.bat). Opens in your browser.
+The link carries a secret key (kept in cache/review_key); without it every page returns 403.
 """
 
 import json
+import secrets
 import shutil
 import sys
 import threading
 import webbrowser
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, abort, jsonify, redirect, request, send_from_directory
 from send2trash import send2trash
 
 ROOT = Path(__file__).resolve().parent
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
 DOWNLOADS = ROOT / CONFIG["output_folder"]
 UNPROCESSED = DOWNLOADS / "unprocessed"
-APPROVED = {"reel": DOWNLOADS / "approved_reels", "picture": DOWNLOADS / "approved_pictures"}
+APPROVED = {"reel": DOWNLOADS / "processed_videos", "picture": DOWNLOADS / "processed_images"}
 VIDEO_EXT = {".mp4", ".mov", ".webm"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 PORT = 8765
+KEY_FILE = ROOT / "cache" / "review_key"
 
 app = Flask(__name__)
+
+
+def review_key():
+    if not KEY_FILE.exists():
+        KEY_FILE.parent.mkdir(exist_ok=True)
+        KEY_FILE.write_text(secrets.token_urlsafe(16), encoding="utf-8")
+    return KEY_FILE.read_text(encoding="utf-8").strip()
+
+
+KEY = review_key()
+
+
+@app.before_request
+def require_key():
+    # Opening the link with ?key=... stores the key in a cookie for later requests.
+    if request.args.get("key") == KEY:
+        response = redirect(request.path)
+        response.set_cookie("key", KEY, max_age=365 * 24 * 60 * 60, httponly=True, samesite="Strict")
+        return response
+    if request.cookies.get("key") != KEY:
+        abort(403)
 
 
 def kind_of(path):
@@ -97,7 +121,7 @@ if __name__ == "__main__":
     UNPROCESSED.mkdir(parents=True, exist_ok=True)
     for folder in APPROVED.values():
         folder.mkdir(parents=True, exist_ok=True)
-    url = f"http://127.0.0.1:{PORT}"
+    url = f"http://127.0.0.1:{PORT}/?key={KEY}"
     print(f"Review app running at {url}  (close this window to stop)")
     if "--no-browser" not in sys.argv:
         threading.Timer(1, webbrowser.open, [url]).start()
