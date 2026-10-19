@@ -208,6 +208,8 @@ def main():
             creation = container(user_id, token, image_url=host(files[0]), caption=caption)
         link = publish(user_id, token, creation)
     except Exception as e:
+        if isinstance(e, urllib.error.HTTPError):  # name the server that failed, not just the status
+            e = f"{e} from {e.url.split('?')[0]}: {e.read().decode(errors='replace')[:200]}"
         log.error("Posting %s failed: %s", kind, e)
         return 1
     move_to_posted(files)
