@@ -87,7 +87,43 @@ def pick_post(force_slideshow=False):
 
 # ---------- Hosting and Instagram ----------
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+BUCKET = "posts"
+hosted = []  # files put in the Supabase bucket this run, deleted once the post is done
+
+
+def supabase(method, path, body=None, content_type="application/json"):
+    request = urllib.request.Request(f"{SUPABASE_URL}/storage/v1/{path}", data=body, method=method, headers={
+        "Authorization": f"Bearer {SUPABASE_KEY}", "apikey": SUPABASE_KEY, "Content-Type": content_type})
+    with urllib.request.urlopen(request, timeout=300) as response:
+        return json.load(response)
+
+
 def host(path):
+    """Put the file in the private Supabase bucket and return a link that works for an hour.
+    Falls back to litterbox if Supabase isn't set up or fails."""
+    if SUPABASE_URL and SUPABASE_KEY:
+        name = f"{uuid.uuid4().hex}{path.suffix.lower()}"
+        try:
+            supabase("POST", f"object/{BUCKET}/{name}", path.read_bytes(), "application/octet-stream")
+            hosted.append(name)
+            signed = supabase("POST", f"object/sign/{BUCKET}/{name}", json.dumps({"expiresIn": 3600}).encode())
+            return f"{SUPABASE_URL}/storage/v1{signed['signedURL']}"
+        except urllib.error.URLError as e:
+            log.warning("Supabase failed for %s (%s), trying litterbox", path.name, e)
+    return litterbox(path)
+
+
+def clean_up_hosted():
+    if hosted:
+        try:
+            supabase("DELETE", f"object/{BUCKET}", json.dumps({"prefixes": hosted}).encode())
+        except urllib.error.URLError as e:
+            log.warning("Couldn't delete %d file(s) from Supabase: %s", len(hosted), e)
+
+
+def litterbox(path):
     """Upload to litterbox for an hour and return the public link."""
     boundary = uuid.uuid4().hex
     fields = b"".join(
@@ -212,6 +248,8 @@ def main():
             e = f"{e} from {e.url.split('?')[0]}: {e.read().decode(errors='replace')[:200]}"
         log.error("Posting %s failed: %s", kind, e)
         return 1
+    finally:
+        clean_up_hosted()
     move_to_posted(files)
     log.info("Posted %s: %s", kind, link)
     if kind == "slideshow":
