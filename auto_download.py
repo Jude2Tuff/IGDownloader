@@ -226,7 +226,8 @@ def refresh_token(token):
         {"grant_type": "ig_refresh_token", "access_token": token})
     with urllib.request.urlopen(url, timeout=30) as response:
         token = json.load(response)["access_token"]
-    subprocess.run(["setx", "IG_TOKEN", token], check=True, capture_output=True)
+    subprocess.run(["setx", "IG_TOKEN", token], check=True, capture_output=True,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # no console pop-up
     TOKEN_REFRESHED_FILE.parent.mkdir(exist_ok=True)
     TOKEN_REFRESHED_FILE.touch()
     log.info("Instagram token refreshed.")

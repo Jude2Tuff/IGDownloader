@@ -47,6 +47,8 @@ MAX_SLIDES = 10  # Instagram's carousel limit
 SLIDESHOW_CHANCE = 0.7  # how often a loose image gets bundled into a slideshow instead of posting alone
 CAPTION_LIMIT = 2200  # Instagram's maximum
 SLIDE = re.compile(r"^(.*)_(\d+)$")
+# Scheduled runs use pythonw, so FFmpeg would open its own console window; closing it kills the post.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def caption_of(path):
@@ -172,7 +174,8 @@ def publish(user_id, token, creation_id):
 def slideshow_video(images, track, out_path):
     """Render images (1080x1920) over the whole music track with FFmpeg, slides spread evenly across it."""
     total = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                                  str(track)], capture_output=True, text=True, check=True).stdout)
+                                  str(track)], capture_output=True, text=True, check=True,
+                                 creationflags=NO_WINDOW).stdout)
     per_slide = total / len(images)
     command = ["ffmpeg", "-y", "-loglevel", "error"]
     for image in images:
@@ -186,7 +189,7 @@ def slideshow_video(images, track, out_path):
     command += ["-filter_complex", scaled + joined + fade, "-map", "[v]", "-map", "[a]",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
                 "-t", f"{total:.3f}", "-movflags", "+faststart", str(out_path)]
-    subprocess.run(command, check=True)
+    subprocess.run(command, check=True, creationflags=NO_WINDOW)
 
 
 # ---------- Main ----------
